@@ -14,6 +14,9 @@ API attendue :
 """
 
 import os
+from io import BytesIO
+from urllib.parse import parse_qs, urlparse
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -57,6 +60,21 @@ def get_config_value(name: str) -> str:
 
 def get_dataset_source() -> str:
     return get_config_value("REAL_ESTATE_DATA_URL") or str(DATASET_PATH)
+
+
+def google_drive_file_id(url: str) -> str:
+    parsed_url = urlparse(url)
+    query_file_id = parse_qs(parsed_url.query).get("id", [""])[0]
+    if query_file_id:
+        return query_file_id
+
+    parts = [part for part in parsed_url.path.split("/") if part]
+    if "d" in parts:
+        file_id_index = parts.index("d") + 1
+        if file_id_index < len(parts):
+            return parts[file_id_index]
+
+    return ""
 
 
 # ╔════════════════════════════════════════════════════════════╗
@@ -460,7 +478,7 @@ def render_estimation_tab():
 
         submitted = st.form_submit_button(
             "🏷️ Estimer le prix",
-            use_container_width=True,
+            width="stretch",
         )
 
     if not submitted:
@@ -560,13 +578,13 @@ def render_batch_tab():
 
     st.dataframe(
         df.head(10),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
     if not st.button(
         "🏘️ Estimer tous les biens",
-        use_container_width=True,
+        width="stretch",
     ):
         return
 
@@ -605,7 +623,7 @@ def render_batch_tab():
     st.markdown("#### Résultats")
     st.dataframe(
         batch_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "estimated_price": st.column_config.NumberColumn(
@@ -650,6 +668,28 @@ def render_batch_tab():
 
 @st.cache_data
 def load_raw_dataset(path: str) -> pd.DataFrame:
+    if path.startswith(("http://", "https://")) and "drive.google.com" in path:
+        file_id = google_drive_file_id(path)
+        if not file_id:
+            raise ValueError("Lien Google Drive invalide : file id introuvable.")
+
+        download_url = (
+            "https://drive.usercontent.google.com/download"
+            f"?id={file_id}&export=download&confirm=t"
+        )
+        response = requests.get(download_url, timeout=90)
+        response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "").lower()
+        preview = response.content[:300].lower()
+        if "text/html" in content_type or b"<html" in preview:
+            raise ValueError(
+                "Google Drive n'a pas renvoyé le CSV brut. "
+                "Vérifie que le fichier est partagé en accès lien."
+            )
+
+        return pd.read_csv(BytesIO(response.content))
+
     return pd.read_csv(path)
 
 
@@ -660,6 +700,10 @@ def prepare_dataset_for_visualization(df: pd.DataFrame) -> pd.DataFrame:
     aux visualisations du notebook, sans appliquer le preprocessing ML.
     """
     df = df.copy()
+
+    for column in ["price", "bed", "bath", "house_size"]:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
 
     # Le notebook convertit prev_sold_date en datetime.
     if "prev_sold_date" in df.columns:
@@ -676,6 +720,16 @@ def prepare_dataset_for_visualization(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def missing_visualization_columns(df: pd.DataFrame) -> list[str]:
+    expected_columns = ["price", "city", "state", "bed", "bath", "house_size"]
+    return [column for column in expected_columns if column not in df.columns]
+
+
+def empty_numeric_columns(df: pd.DataFrame) -> list[str]:
+    numeric_columns = ["price", "bed", "bath", "house_size"]
+    return [column for column in numeric_columns if df[column].dropna().empty]
+
+
 def dataset_expanders(df: pd.DataFrame):
     with st.expander("📏 Dimensions"):
         st.write(f"{df.shape[0]:,} lignes × {df.shape[1]} colonnes")
@@ -683,7 +737,7 @@ def dataset_expanders(df: pd.DataFrame):
     with st.expander("🧬 Types de données"):
         st.dataframe(
             df.dtypes.astype(str).to_frame("dtype"),
-            use_container_width=True,
+            width="stretch",
         )
 
     with st.expander("⚠️ Valeurs manquantes"):
@@ -704,7 +758,7 @@ def dataset_expanders(df: pd.DataFrame):
         else:
             st.dataframe(
                 missing,
-                use_container_width=True,
+                width="stretch",
             )
 
     with st.expander("🔂 Doublons"):
@@ -715,13 +769,13 @@ def dataset_expanders(df: pd.DataFrame):
 
         st.dataframe(
             unique_values,
-            use_container_width=True,
+            width="stretch",
         )
 
     with st.expander("👀 Aperçu"):
         st.dataframe(
             df.head(10),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -754,10 +808,14 @@ def plot_real_estate_correlation(df: pd.DataFrame):
     if "price" in numeric_df.columns:
         numeric_df = numeric_df.drop(columns=["price"])
 
+    corr = numeric_df.corr().dropna(axis=0, how="all").dropna(axis=1, how="all")
+    if corr.shape[0] < 2 or corr.shape[1] < 2:
+        return None
+
     fig, ax = dark_fig((6, 5))
 
     sns.heatmap(
-        numeric_df.corr(),
+        corr,
         annot=True,
         fmt=".2f",
         cmap="coolwarm",
@@ -982,7 +1040,11 @@ def render_dataset_tab():
         )
         return
 
-    df_raw = load_raw_dataset(dataset_source)
+    try:
+        df_raw = load_raw_dataset(dataset_source)
+    except Exception as exc:
+        st.error(f"Impossible de charger le dataset : {exc}")
+        return
 
     # Copie uniquement destinée aux visualisations.
     df_viz = prepare_dataset_for_visualization(df_raw)
@@ -995,12 +1057,28 @@ def render_dataset_tab():
 
     dataset_expanders(df_raw)
 
+    missing_columns = missing_visualization_columns(df_viz)
+    if missing_columns:
+        st.warning(
+            "Visualisations indisponibles : colonnes manquantes "
+            f"{', '.join(missing_columns)}."
+        )
+        return
+
+    empty_columns = empty_numeric_columns(df_viz)
+    if empty_columns:
+        st.warning(
+            "Visualisations indisponibles : colonnes numériques vides "
+            f"{', '.join(empty_columns)}."
+        )
+        return
+
     st.markdown("---")
     st.markdown("### Visualisations exploratoires")
 
     if not st.button(
         "📊 Générer les visualisations",
-        use_container_width=False,
+        width="content",
     ):
         return
 
@@ -1011,12 +1089,14 @@ def render_dataset_tab():
 
     with center:
         fig = plot_real_estate_correlation(df_viz)
-        st.pyplot(
-            fig,
-            use_container_width=True,
-        )
-
-    plt.close(fig)
+        if fig is None:
+            st.info("Matrice de corrélation indisponible : pas assez de colonnes numériques.")
+        else:
+            st.pyplot(
+                fig,
+                width="stretch",
+            )
+            plt.close(fig)
 
     # ── Distribution price / log price ───────────────────────
     st.markdown("#### Distribution du prix")
@@ -1027,7 +1107,7 @@ def render_dataset_tab():
         fig = plot_price_distribution(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1035,7 +1115,7 @@ def render_dataset_tab():
         fig = plot_log_price_distribution(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1048,7 +1128,7 @@ def render_dataset_tab():
         fig = plot_price_by_city(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
 
     plt.close(fig)
@@ -1062,7 +1142,7 @@ def render_dataset_tab():
         fig = plot_price_by_bedrooms(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1070,7 +1150,7 @@ def render_dataset_tab():
         fig = plot_price_by_bathrooms(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1083,7 +1163,7 @@ def render_dataset_tab():
         fig = plot_house_size_vs_price(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
 
     plt.close(fig)
@@ -1097,7 +1177,7 @@ def render_dataset_tab():
         fig = plot_top_states(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1105,7 +1185,7 @@ def render_dataset_tab():
         fig = plot_median_price_by_state(df_viz)
         st.pyplot(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
         plt.close(fig)
 
@@ -1224,7 +1304,7 @@ def render_model_tab():
     with chart_center:
         st.plotly_chart(
             fig,
-            use_container_width=True,
+            width="stretch",
         )
 
 
