@@ -267,7 +267,7 @@ def init_session_state():
         "access_token": None,
         "refresh_token": None,
         "username": None,
-        "authenticated": False,
+        "authenticated": True,
         "demo_mode": False,
     }
 
@@ -369,17 +369,9 @@ def authenticated_request(method: str, endpoint: str, **kwargs) -> requests.Resp
 
 def render_sidebar():
     with st.sidebar:
-        st.markdown("### ⚙️ Connexion API")
-
-        if st.session_state.demo_mode:
-            # En démo publique : l'URL est fixée par le déployeur, pas
-            # modifiable par le visiteur (évite qu'il pointe l'app vers
-            # une API tierce de son choix).
-            st.caption(f"API : `{st.session_state.base_url}`")
-        else:
-            st.session_state.base_url = st.text_input(
-                "URL de l'API", value=str(st.session_state.base_url)
-            )
+        st.markdown("### ⚙️ API")
+        st.caption(f"API : `{st.session_state.base_url}`")
+        st.caption("URL configurée par le déploiement.")
 
         if st.session_state.demo_mode:
             st.markdown(
@@ -387,42 +379,8 @@ def render_sidebar():
                 f'color: {ACCENT_BRAND};">🌐 Mode démo — accès libre</div>',
                 unsafe_allow_html=True,
             )
-            st.caption(
-                "L'authentification est désactivée sur cette instance de démonstration."
-            )
-            return
-
-        if st.session_state.authenticated:
-            st.markdown(
-                f'<div class="risk-badge" style="background: rgba(52,211,153,0.15); '
-                f'color: {ACCENT_SAFE};">🟢 Connecté — {st.session_state.username}</div>',
-                unsafe_allow_html=True,
-            )
-            st.button("Se déconnecter", on_click=logout, use_container_width=True)
         else:
-            with st.form("login_form"):
-                username = st.text_input("Utilisateur", value="admin")
-                password = st.text_input("Mot de passe", type="password")
-                submitted = st.form_submit_button(
-                    "Se connecter", use_container_width=True
-                )
-
-            if submitted:
-                try:
-                    tokens = api_login(
-                        str(st.session_state.base_url), username, password
-                    )
-                    st.session_state.access_token = tokens["access_token"]
-                    st.session_state.refresh_token = tokens["refresh_token"]
-                    st.session_state.username = username
-                    st.session_state.authenticated = True
-                    st.rerun()
-                except requests.exceptions.HTTPError:
-                    st.error("Identifiants invalides.")
-                except requests.exceptions.RequestException:
-                    st.error(
-                        f"Impossible de joindre l'API sur {st.session_state.base_url}."
-                    )
+            st.caption("Mode public : aucune configuration visiteur.")
 
 
 # ╔════════════════════════════════════════════════════════════╗
@@ -1297,10 +1255,6 @@ def main():
         "</div>",
         unsafe_allow_html=True,
     )
-
-    if not st.session_state.authenticated:
-        st.info("Connecte-toi via la barre latérale pour accéder aux estimations.")
-        return
 
     tab_estimation, tab_batch, tab_dataset, tab_model = st.tabs(
         [
