@@ -16,4 +16,8 @@ COPY api ./api
 COPY core ./core
 COPY models ./models
 
+RUN python -c "import joblib; import category_encoders; joblib.load('models/baseline_model.joblib'); from api.app import app; print(app.title)"
+
+EXPOSE 8080
+
 CMD ["sh", "-c", "uvicorn api.app:app --host 0.0.0.0 --port ${PORT:-8080}"]

@@ -11,19 +11,9 @@ from core.settings import settings
 # ║ 🌐 API
 # ╚════════════════════════════════════════════════════════════╝
 from fastapi import FastAPI
-from contextlib import asynccontextmanager
-import joblib
-
-
-# ═════════════════════ MODEL LOADING ═════════════════════
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.model = joblib.load(settings.BASELINE_PATH)
-    yield
 
 
 app = FastAPI(
-    lifespan=lifespan,
     title=settings.APP_NAME,
     description=settings.DESCRIPTION,
     docs_url="/docs",
@@ -71,4 +61,5 @@ def health_check():
         "status": "OK",
         "app": settings.APP_NAME,
         "demo_mode": settings.DEMO_MODE,
+        "model_loaded": hasattr(app.state, "model"),
     }

@@ -6,6 +6,7 @@ from core.settings import settings
 from fastapi import Request, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+import joblib
 from typing import Optional
 
 from jose import jwt, JWTError
@@ -14,6 +15,9 @@ from datetime import datetime, timedelta, timezone
 
 
 def get_model(request: Request):
+    if not hasattr(request.app.state, "model"):
+        request.app.state.model = joblib.load(settings.BASELINE_PATH)
+
     return request.app.state.model
 
 
