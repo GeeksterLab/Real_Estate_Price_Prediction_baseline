@@ -29,6 +29,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DATASET_PATH = PROJECT_ROOT / "data" / "realtor-data.csv"
+DEFAULT_API_URL = "https://real-estate-mvp-6pbq7hx72a-ew.a.run.app"
 
 
 def read_local_env_value(name: str) -> str:
@@ -48,18 +49,30 @@ def read_local_env_value(name: str) -> str:
     return ""
 
 
-def get_config_value(name: str) -> str:
+def default_api_url() -> str:
+    """
+    Ordre de priorité : st.secrets (Streamlit Cloud) > variable d'env >
+    .env local > URL Cloud Run par défaut.
+    """
     try:
-        secret_value = st.secrets.get(name)
+        return st.secrets["API_URL"]
     except (KeyError, FileNotFoundError):
-        secret_value = None
-
-    value = secret_value or os.getenv(name) or read_local_env_value(name)
-    return str(value) if value else ""
+        return (
+            os.environ.get("API_URL")
+            or read_local_env_value("API_URL")
+            or DEFAULT_API_URL
+        )
 
 
 def get_dataset_source() -> str:
-    return get_config_value("REAL_ESTATE_DATA_URL") or str(DATASET_PATH)
+    try:
+        dataset_url = st.secrets["REAL_ESTATE_DATA_URL"]
+    except (KeyError, FileNotFoundError):
+        dataset_url = os.environ.get("REAL_ESTATE_DATA_URL") or read_local_env_value(
+            "REAL_ESTATE_DATA_URL"
+        )
+
+    return dataset_url or str(DATASET_PATH)
 
 
 def google_drive_file_id(url: str) -> str:
@@ -100,13 +113,6 @@ ACCENT_SAFE = "#34d399"
 ACCENT_BRAND = "#38bdf8"
 SUCCESS = "#7db89d"
 BORDER = "rgba(232, 183, 127, 0.18)"
-
-
-def default_api_url() -> str:
-    try:
-        return st.secrets["API_URL"]
-    except (KeyError, FileNotFoundError):
-        return os.environ.get("API_URL", "http://localhost:8000")
 
 
 # ╔════════════════════════════════════════════════════════════╗
@@ -381,24 +387,26 @@ def authenticated_request(method: str, endpoint: str, **kwargs) -> requests.Resp
 
 
 # ╔════════════════════════════════════════════════════════════╗
-# ║ 🧭 SIDEBAR
+# ║ 🧭 SIDEBAR — connexion
 # ╚════════════════════════════════════════════════════════════╝
-
-
 def render_sidebar():
     with st.sidebar:
-        st.markdown("### ⚙️ API")
+        st.markdown("### ⚙️ Connexion API")
         st.caption(f"API : `{st.session_state.base_url}`")
-        st.caption("URL configurée par le déploiement.")
 
         if st.session_state.demo_mode:
+            # En démo publique : l'URL est fixée par le déployeur, pas
+            # modifiable par le visiteur (évite qu'il pointe l'app vers
+            # une API tierce de son choix).
             st.markdown(
                 f'<div class="risk-badge" style="background: rgba(56,189,248,0.15); '
                 f'color: {ACCENT_BRAND};">🌐 Mode démo — accès libre</div>',
                 unsafe_allow_html=True,
             )
-        else:
-            st.caption("Mode public : aucune configuration visiteur.")
+            st.caption(
+                "L'authentification est désactivée sur cette instance de démonstration."
+            )
+            return
 
 
 # ╔════════════════════════════════════════════════════════════╗
@@ -1090,7 +1098,9 @@ def render_dataset_tab():
     with center:
         fig = plot_real_estate_correlation(df_viz)
         if fig is None:
-            st.info("Matrice de corrélation indisponible : pas assez de colonnes numériques.")
+            st.info(
+                "Matrice de corrélation indisponible : pas assez de colonnes numériques."
+            )
         else:
             st.pyplot(
                 fig,
