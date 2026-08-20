@@ -1,0 +1,13 @@
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.streamlit/
+.venv/
+data/
+notebooks/
+streamlit/
+tests/
+memo.md

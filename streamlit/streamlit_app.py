@@ -29,10 +29,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DATASET_PATH = PROJECT_ROOT / "data" / "realtor-data.csv"
-DEFAULT_API_URL = "https://real-estate-mvp-6pbq7hx72a-ew.a.run.app"
+DEFAULT_API_URL = (
+    "https://real-estate-price-prediction-baseline-761672142762.europe-west1.run.app"
+)
 
 
 def read_local_env_value(name: str) -> str:
+
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return ""
