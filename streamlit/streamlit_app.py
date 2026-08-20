@@ -54,11 +54,11 @@ def read_local_env_value(name: str) -> str:
 
 def default_api_url() -> str:
     """
-    Ordre de priorité : variable d'env > .env local > URL Cloud Run par défaut.
-    On ignore volontairement st.secrets["API_URL"] pour éviter qu'un ancien
-    secret Streamlit pointe l'app vers le mauvais service Cloud Run.
+    URL Cloud Run de l'API de prediction immobiliere.
+    Elle est forcee ici pour eviter qu'un ancien secret Streamlit API_URL
+    pointe l'app vers un autre service Cloud Run.
     """
-    return os.environ.get("API_URL") or read_local_env_value("API_URL") or DEFAULT_API_URL
+    return DEFAULT_API_URL
 
 
 def get_dataset_source() -> str:
@@ -283,8 +283,9 @@ def inject_css():
 # ║ 🔐 SESSION / AUTH
 # ╚════════════════════════════════════════════════════════════╝
 def init_session_state():
+    api_url = default_api_url()
     defaults = {
-        "base_url": default_api_url(),
+        "base_url": api_url,
         "access_token": None,
         "refresh_token": None,
         "username": None,
@@ -295,6 +296,9 @@ def init_session_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    if st.session_state.base_url != api_url:
+        st.session_state.base_url = api_url
 
 
 def logout():
