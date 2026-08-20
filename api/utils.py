@@ -10,7 +10,6 @@ import joblib
 from typing import Optional
 
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 
 
@@ -25,27 +24,12 @@ def get_model(request: Request):
 # ║ 🔑 AUTHENTICATION
 # ╚════════════════════════════════════════════════════════════╝
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# ── PASSWORD ──────────────────────────────────────────────
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-
-def verify_password(
-    plain_password: str,
-    hash_password: str,
-):
-    return pwd_context.verify(plain_password, hash_password)
-
-
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 
 FAKE_USER = {
     "username": settings.USERNAME,
-    "hashed_password": hash_password(settings.SECRET_KEY),
+    "password": settings.SECRET_KEY,
 }
 
 
@@ -55,9 +39,7 @@ def authenticate_user(
     password: str,
 ) -> Optional[dict]:
 
-    if username == FAKE_USER["username"] and verify_password(
-        password, FAKE_USER["hashed_password"]
-    ):
+    if username == FAKE_USER["username"] and password == FAKE_USER["password"]:
         return {"username": username}
     return None
 
