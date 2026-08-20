@@ -54,17 +54,11 @@ def read_local_env_value(name: str) -> str:
 
 def default_api_url() -> str:
     """
-    Ordre de priorité : st.secrets (Streamlit Cloud) > variable d'env >
-    .env local > URL Cloud Run par défaut.
+    Ordre de priorité : variable d'env > .env local > URL Cloud Run par défaut.
+    On ignore volontairement st.secrets["API_URL"] pour éviter qu'un ancien
+    secret Streamlit pointe l'app vers le mauvais service Cloud Run.
     """
-    try:
-        return st.secrets["API_URL"]
-    except (KeyError, FileNotFoundError):
-        return (
-            os.environ.get("API_URL")
-            or read_local_env_value("API_URL")
-            or DEFAULT_API_URL
-        )
+    return os.environ.get("API_URL") or read_local_env_value("API_URL") or DEFAULT_API_URL
 
 
 def get_dataset_source() -> str:
