@@ -1372,4 +1372,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        st.error("Erreur au demarrage de l'application Streamlit.")
+        st.exception(exc)
