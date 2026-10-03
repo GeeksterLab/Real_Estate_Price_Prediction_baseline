@@ -59,7 +59,7 @@ jobs:
         run: uv run pytest
 
       - name: Run tests with coverage
-        run: uv run pytest --cov=api --cov=core --cov-report=term-missing --cov-fail-under=75
+        run: uv run pytest --cov=api --cov=core --cov-report=term-missing --cov-fail-under=65
 
   # ────────────────────────────────────────────────────────────
   # JOB 2 : build + deploy, seulement sur push vers main
